@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amazon Sales Analytics Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Syne:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <main class="container">
+    <header class="header">
+      <div class="headline-wrap">
+        <h1>Amazon Sales Analytics Control Room</h1>
+        <span class="status-pill">Live Dataset View</span>
+      </div>
+      <p>Practical business analysis dashboard for KPI tracking, trend monitoring, and transaction-level exploration.</p>
+    </header>
+
+    <section class="kpi-grid">
+      <article class="kpi-card"><h3>Total Sales</h3><p>{{ dashboard.kpis.total_sales }}</p></article>
+      <article class="kpi-card"><h3>Total Profit</h3><p>{{ dashboard.kpis.total_profit }}</p></article>
+      <article class="kpi-card"><h3>Total Orders</h3><p>{{ dashboard.kpis.total_orders }}</p></article>
+      <article class="kpi-card"><h3>Average Sales</h3><p>{{ dashboard.kpis.avg_sales }}</p></article>
+      <article class="kpi-card"><h3>Average Profit</h3><p>{{ dashboard.kpis.avg_profit }}</p></article>
+      <article class="kpi-card"><h3>Profit Margin</h3><p>{{ dashboard.kpis.profit_margin }}</p></article>
+    </section>
+
+    <section class="insight-strip">
+      <article><h4>Top Sales State</h4><p>{{ dashboard.insights.best_state }}</p></article>
+      <article><h4>State To Improve</h4><p>{{ dashboard.insights.weak_state }}</p></article>
+      <article><h4>Best Sales Month</h4><p>{{ dashboard.insights.best_sales_month }}</p></article>
+      <article><h4>Best Profit Month</h4><p>{{ dashboard.insights.best_profit_month }}</p></article>
+      <article><h4>Preferred Payment</h4><p>{{ dashboard.insights.top_payment }}</p></article>
+    </section>
+
+    <section class="charts-grid">
+      <article class="chart-card"><h3>Sales by State</h3><canvas id="stateChart"></canvas></article>
+      <article class="chart-card"><h3>Sales by Category</h3><canvas id="categoryPie"></canvas></article>
+      <article class="chart-card"><h3>Profit by Category</h3><canvas id="profitColumn"></canvas></article>
+      <article class="chart-card"><h3>Order Count by Payment Mode</h3><canvas id="paymentModeBar"></canvas></article>
+      <article class="chart-card chart-wide"><h3>Monthly Sales and Profit Trend</h3><canvas id="monthlyDual"></canvas></article>
+      <article class="chart-card chart-wide"><h3>Top 10 Products by Sales</h3><canvas id="topProducts"></canvas></article>
+    </section>
+
+    <section class="analysis-grid">
+      <article class="panel-card">
+        <h3>Top 5 Customers by Revenue</h3>
+        <table class="mini-table">
+          <thead><tr><th>Customer</th><th>Sales</th></tr></thead>
+          <tbody>
+            {% for customer in dashboard.top_customers %}
+            <tr><td>{{ customer.name }}</td><td>{{ "{:,.2f}".format(customer.sales) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </article>
+
+      <article class="panel-card">
+        <h3>High Sales, Low Profit Products</h3>
+        <table class="mini-table">
+          <thead><tr><th>Product</th><th>Category</th><th>Sales</th><th>Profit</th></tr></thead>
+          <tbody>
+            {% for item in dashboard.risky_products %}
+            <tr>
+              <td>{{ item.product }}</td>
+              <td>{{ item.category }}</td>
+              <td>{{ "{:,.2f}".format(item.sales) }}</td>
+              <td class="loss">{{ "{:,.2f}".format(item.profit) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section class="panel-card table-panel">
+      <div class="table-headline">
+        <h3>Dataset Explorer</h3>
+        <p>Use filters to inspect transaction-level data from the dataset.</p>
+      </div>
+
+      <div class="filters-row">
+        <input id="searchInput" type="text" placeholder="Search order, customer, product..." />
+
+        <select id="stateFilter">
+          <option value="">All States</option>
+          {% for state in dashboard.filters.states %}
+          <option value="{{ state }}">{{ state }}</option>
+          {% endfor %}
+        </select>
+
+        <select id="categoryFilter">
+          <option value="">All Categories</option>
+          {% for category in dashboard.filters.categories %}
+          <option value="{{ category }}">{{ category }}</option>
+          {% endfor %}
+        </select>
+
+        <select id="paymentFilter">
+          <option value="">All Payment Modes</option>
+          {% for mode in dashboard.filters.payment_modes %}
+          <option value="{{ mode }}">{{ mode }}</option>
+          {% endfor %}
+        </select>
+
+        <button id="resetFilters" type="button">Reset</button>
+      </div>
+
+      <p id="tableMeta" class="table-meta"></p>
+
+      <div class="table-wrap">
+        <table id="datasetTable" class="main-table">
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Date</th>
+              <th>State</th>
+              <th>City</th>
+              <th>Category</th>
+              <th>Sub-Category</th>
+              <th>Product</th>
+              <th>Customer</th>
+              <th>Payment</th>
+              <th>Qty</th>
+              <th>Sales</th>
+              <th>Profit</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const dashboard = {{ dashboard|tojson }};
+    const allRows = dashboard.table_rows;
+
+    const neonPalette = ["#00F5D4", "#00BBF9", "#F15BB5", "#FEE440", "#FB5607", "#2EC4B6", "#3A86FF", "#FF006E", "#8338EC", "#8AC926"];
+
+    const commonOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#EAF8FF" } }
+      },
+      scales: {
+        x: { ticks: { color: "#C5E7FF" }, grid: { color: "rgba(175,224,255,0.08)" } },
+        y: { ticks: { color: "#C5E7FF" }, grid: { color: "rgba(175,224,255,0.08)" } }
+      }
+    };
+
+    new Chart(document.getElementById("stateChart"), {
+      type: "bar",
+      data: {
+        labels: dashboard.sales_by_state.labels,
+        datasets: [{
+          label: "Sales",
+          data: dashboard.sales_by_state.values,
+          backgroundColor: neonPalette,
+          borderRadius: 7
+        }]
+      },
+      options: commonOptions
+    });
+
+    new Chart(document.getElementById("categoryPie"), {
+      type: "pie",
+      data: {
+        labels: dashboard.sales_by_category.labels,
+        datasets: [{
+          data: dashboard.sales_by_category.values,
+          backgroundColor: neonPalette
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: "#EAF8FF" } } }
+      }
+    });
+
+    new Chart(document.getElementById("profitColumn"), {
+      type: "bar",
+      data: {
+        labels: dashboard.profit_by_category.labels,
+        datasets: [{
+          label: "Profit",
+          data: dashboard.profit_by_category.values,
+          backgroundColor: ["#00F5D4", "#FEE440", "#F15BB5"],
+          borderRadius: 7
+        }]
+      },
+      options: commonOptions
+    });
+
+    new Chart(document.getElementById("paymentModeBar"), {
+      type: "bar",
+      data: {
+        labels: dashboard.payment_mode_orders.labels,
+        datasets: [{
+          label: "Orders",
+          data: dashboard.payment_mode_orders.values,
+          backgroundColor: ["#00BBF9", "#8AC926", "#FB5607", "#F15BB5", "#FEE440"],
+          borderRadius: 7
+        }]
+      },
+      options: commonOptions
+    });
+
+    new Chart(document.getElementById("monthlyDual"), {
+      type: "line",
+      data: {
+        labels: dashboard.monthly_sales.labels,
+        datasets: [
+          {
+            label: "Sales",
+            data: dashboard.monthly_sales.sales,
+            borderColor: "#00F5D4",
+            backgroundColor: "rgba(0, 245, 212, 0.12)",
+            fill: true,
+            tension: 0.28,
+            pointRadius: 2
+          },
+          {
+            label: "Profit",
+            data: dashboard.monthly_sales.profit,
+            borderColor: "#F15BB5",
+            backgroundColor: "rgba(241, 91, 181, 0.08)",
+            fill: false,
+            tension: 0.28,
+            pointRadius: 2
+          }
+        ]
+      },
+      options: commonOptions
+    });
+
+    new Chart(document.getElementById("topProducts"), {
+      type: "bar",
+      data: {
+        labels: dashboard.top_products.labels,
+        datasets: [{
+          label: "Sales",
+          data: dashboard.top_products.values,
+          backgroundColor: neonPalette,
+          borderRadius: 7
+        }]
+      },
+      options: {
+        ...commonOptions,
+        indexAxis: "y"
+      }
+    });
+
+    const searchInput = document.getElementById("searchInput");
+    const stateFilter = document.getElementById("stateFilter");
+    const categoryFilter = document.getElementById("categoryFilter");
+    const paymentFilter = document.getElementById("paymentFilter");
+    const resetFilters = document.getElementById("resetFilters");
+    const tableMeta = document.getElementById("tableMeta");
+    const tableBody = document.querySelector("#datasetTable tbody");
+
+    function formatNum(v) {
+      return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function getFilteredRows() {
+      const query = searchInput.value.trim().toLowerCase();
+      const state = stateFilter.value;
+      const category = categoryFilter.value;
+      const payment = paymentFilter.value;
+
+      return allRows.filter((row) => {
+        const statePass = !state || row.state === state;
+        const catPass = !category || row.category === category;
+        const payPass = !payment || row.payment_mode === payment;
+
+        const text = `${row.order_id} ${row.customer} ${row.product} ${row.city}`.toLowerCase();
+        const queryPass = !query || text.includes(query);
+
+        return statePass && catPass && payPass && queryPass;
+      });
+    }
+
+    function renderTable() {
+      const rows = getFilteredRows();
+      tableMeta.textContent = `Showing ${rows.length} of ${allRows.length} rows`;
+
+      tableBody.innerHTML = "";
+      rows.slice(0, 120).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.order_id}</td>
+          <td>${row.order_date}</td>
+          <td>${row.state}</td>
+          <td>${row.city}</td>
+          <td>${row.category}</td>
+          <td>${row.sub_category}</td>
+          <td>${row.product}</td>
+          <td>${row.customer}</td>
+          <td>${row.payment_mode}</td>
+          <td>${row.quantity}</td>
+          <td>${formatNum(row.sales)}</td>
+          <td class="${row.profit < 0 ? "loss" : "profit"}">${formatNum(row.profit)}</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    [searchInput, stateFilter, categoryFilter, paymentFilter].forEach((el) => {
+      el.addEventListener("input", renderTable);
+      el.addEventListener("change", renderTable);
+    });
+
+    resetFilters.addEventListener("click", () => {
+      searchInput.value = "";
+      stateFilter.value = "";
+      categoryFilter.value = "";
+      paymentFilter.value = "";
+      renderTable();
+    });
+
+    renderTable();
+  </script>
+</body>
+</html>

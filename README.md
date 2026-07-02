@@ -3,9 +3,6 @@
 A practical Amazon sales analysis project built with Flask, Pandas, and Chart.js.
 This project combines transaction-level data analysis with an interactive dashboard experience for business decision-making.
 
-## GitHub Repo About Section (Copy-Paste)
-Practical Amazon Sales Analytics Dashboard using Flask, Pandas, and Chart.js. Includes KPI cards, trend analysis, product and customer insights, payment analysis, and interactive dataset explorer with filters.
-
 ## Core Highlights
 - Practical KPI layer: Total Sales, Total Profit, Total Orders, Average Sales, Average Profit, Profit Margin.
 - Business insight cards: Best/weak state, best sales month, best profit month, preferred payment mode.
